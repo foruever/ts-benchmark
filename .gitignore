@@ -1,0 +1,19 @@
+*.class
+
+# Package Files #
+*.jar
+*.war
+*.ear
+maven-archiver
+surefire-reports
+default-testCompile
+default-compile
+.settings
+*.classpath
+/bin/
+
+/data/
+*.png
+*.log
+data
+*.db
