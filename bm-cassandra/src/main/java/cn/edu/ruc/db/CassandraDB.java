@@ -1,13 +1,9 @@
 package cn.edu.ruc.db;
 
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Properties;
 
-import cn.edu.ruc.DB;
-import cn.edu.ruc.TSUtils;
 import cn.edu.ruc.biz.Core;
 
 import com.datastax.driver.core.BatchStatement;
@@ -15,7 +11,6 @@ import com.datastax.driver.core.BoundStatement;
 import com.datastax.driver.core.Cluster;
 import com.datastax.driver.core.PreparedStatement;
 import com.datastax.driver.core.ResultSet;
-import com.datastax.driver.core.Row;
 import com.datastax.driver.core.Session;
 
 /**
