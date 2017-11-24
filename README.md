@@ -7,11 +7,10 @@ ts-benchmark是用来测试时序数据库读写性能的测试工具
 
 
 
-1. 单线程导入数据
-1. 多线程导入数据
-1. 零负载响应时间
-1. 混合负载下的吞吐量，响应时间
-1. 导出对比图表
+1. 批量导入历史数据
+1. 混合负载的吞吐量，响应时间
+1. 压力测试-多用户加压测试
+1. 压力测试-多设备加压测试
 
 
 ### Runtime Requirements
@@ -19,7 +18,8 @@ ts-benchmark是用来测试时序数据库读写性能的测试工具
 - Java Runtime Environment 1.8
 - MAVEN 
 - GIT1.7.10 or later 
-- 当测试对象为tsfileDB，需要安装TsfileDB的JDBC
+- 当测试对象为IotDB，需要安装IotDB的JDBC
+- iotJDBC安装如 https://github.com/thulab/iotdb-jdbc
 
 ### Getting Started Simply
 
@@ -27,40 +27,37 @@ ts-benchmark是用来测试时序数据库读写性能的测试工具
 
 
 ```
-git clone https://git.oschina.net/myxof/TsFileDB-JDBC.git
-cd TsFileDB-JDBC
-git checkout issue_IEGJI
-mvn clean install -Dmaven.test.skip=true
-
-git clone https://git.oschina.net/zdyfjh2017/ts-benchmark.git
+git clone https://github.com/foruever/ts-benchmark.git
 linux   
 cd build
-./starup.sh import tsfile -import.is.cc true  -dn 2 -sn 10 -ps 7000 -lcp 50000 -p tsfile.url=jdbc:tsfile://127.0.0.1:6667/#多线程写入数据   
+#批量导入数据
+./starup.sh import tsfile  -dn 2 -sn 10 -ps 7000 -lcp 50000 -p tsfile.url=jdbc:tsfile://127.0.0.1:6667/  
 windows   
 mvn clean package -Dmaven.test.skip=true   
 starup.bat  import tsfile  -dn 2 -sn 10 -ps 7000 -lcp 50000 -p tsfile.url=jdbc:tsfile://127.0.0.1:6667/   
  ```   
-``` ./starup.sh perform tsfile -modules throughput  -tp.sum 1000000 -tp.ps.max 1000000 -tp.clients 1000  -p  tsfile.url=jdbc:tsfile://127.0.0.1:6667/ #吞吐量测试，一共发送1000000个请求，每秒最多发送 1000000个，客户端数为1000个```   
-```./starup.sh perform tsfile -modules timeout  -p  tsfile.url=jdbc:tsfile://127.0.0.1:6667/#无负载响应时间测试```    
-``` ./export_chart.sh #导出测试结果```   
- 
+``` ./starup.sh perform tsfile -modules throughput -p  tsfile.url=jdbc:tsfile://127.0.0.1:6667/ #混合负载的吞吐量，响应时间，一共发送1000000个请求，每秒最多发送 1000000个，客户端数为1000个```   
+
+```
+#压力测试-多用户加压测试
+./starup.sh perform tsfile -modules stress_unappend -p  tsfile.url=jdbc:tsfile://127.0.0.1:6667/
+
+```
+```
+#压力测试-多设备加压测试
+./starup.sh sap tsfile -p  tsfile.url=jdbc:tsfile://127.0.0.1:6667/
+
+```
 
 
 ### 参数描述   
 
 
-- 第一个参数，程序运行```import``` 数据导入,```perform``` 性能测试   
+- 第一个参数，程序运行```import``` 数据导入,```perform``` 性能测试,```sap```  多设备加压测试
 - 第二个参数，目标测试数据库 目前支持四个参数 ```tsfile```,```opentsdb```,```cassandra```,```influxdb```   
-- 其余参数分为两类  
-第一类 程序运行参数   
-```import``` 模式下的参数   
-```-import.is.cc true``` 是否多线程导入,true 多线程写入，false单线程导入，```-dn 10``` 设备数，```-sn 50``` 传感器数，```-ps 7000```  数据采集间隔时间，单位为毫秒 ， ```-lcp 50000``` 一次调用插入接口所插入的数据，```-plr 0.01``` 传感器数据丢失率，默认0.01，```-flr 0.054``` 线性函数率，默认0.054， ```-fsir 0.036``` 正弦函数率，默认 0.036， ```-fsqr  0.054```方波率，默认0.054  ， ```-frr 0.512```随机函数率，默认0.512 ， ```-fcr 0.352``` 常数率，默认0.352；   
- 函数比率只要有一个填了，其余未配置的比率全部默认为0。  
-```perform``` 模式下的参数   
- ```-modules ``` 功能选择，```-modules timeout```  测试无任何负载下的响应时间，不需要配置其他任何程序运行参数```-modules throughput```  测试混合任何负载下的响应时间,负载比例可配置, ```-tp.ratio.write 0.2``` 写入比例0.2,```-tp.ratio.rwrite 0.2``` 写入历史数据比例0.2，```-tp.ratio.update 0.2``` 更新比例0.2,```-tp.ratio.sread 0.2``` 简单查询比例0.2，```-tp.ratio.aread 0.2```分析查询比例0.2.   
-负载比率只要有一个填了，其余未配置的比率全部默认为0。
-
-第二类 目标数据库参数```-p key=value```  
+- 其余参数
+  
+目标数据库参数```-p key=value```  
  tsfile:   
 ``` -p  tsfile.url=jdbc:tsfile://127.0.0.1:6667/```  tsfiledb的jdbc url   
 influxdb:   
