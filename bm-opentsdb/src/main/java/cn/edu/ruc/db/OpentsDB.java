@@ -38,19 +38,14 @@ public class OpentsDB extends DBBase
 	private String QUERY_URL="/api/query";
     public static void main( String[] args ) throws Exception
     {  
-    	for(int i=0;i<100;i++){
-    		System.out.println((int)((double)i/100*100));
-    	}
-//			  
-//    		OpentsDB db=new OpentsDB();
-//    		db.selectDayMaxByDevice(point, startTime, endTime)
+    	Core.main(args);
     }
     
     @Override
     public void init() {  // 形成url
     	super.init();  
     	Properties prop = getProperties();
-    	URL = prop.getProperty(DB_URL_OPENTSDB_PROPERTY,"http://192.168.31.128:22:4242");
+    	URL = prop.getProperty(DB_URL_OPENTSDB_PROPERTY,"http://192.168.31.128:4242");
     	PUT_URL=URL+PUT_URL;//"http://192.168.31.128:4242/api/put";
     	QUERY_URL=URL+QUERY_URL;
     	HttpPoolManager.init();
@@ -64,7 +59,7 @@ public class OpentsDB extends DBBase
 		 * 获取数据库服务器ip+端口号 唯一标识这个数据库服务器
 		 */
 		Properties prop = getProperties();
-	  	URL = prop.getProperty(DB_URL_OPENTSDB_PROPERTY,"http://192.168.31.128:22:4242");
+	  	URL = prop.getProperty(DB_URL_OPENTSDB_PROPERTY,"http://192.168.31.128:4242");
 		return URL;
 	}
 
@@ -115,6 +110,9 @@ public class OpentsDB extends DBBase
 		ArrayList<PointPut> list2 = new ArrayList<PointPut>();
 		if(points!=null){
 			 for(TsPoint point :points) {  //points赋值
+				 	if(point==null){
+				 		break;
+				 	}
 			        PointPut pointPut=new PointPut();
 			        pointPut.setTimestamp(""+point.getTimestamp());
 		 	        pointPut.setValue(point.getValue());
@@ -164,9 +162,6 @@ public class OpentsDB extends DBBase
 			response = hc.execute(post);
 			long endTime = System.nanoTime();
 			costTime=endTime-startTime;
-//			System.out.println(data);
-//			System.out.println(EntityUtils.toString(response.getEntity()));
-//			System.out.println(costTime);
 		} catch (Exception e) {
 			e.printStackTrace();
 			return Status.FAILED(-1);
@@ -216,26 +211,17 @@ public class OpentsDB extends DBBase
 	@Override
 	public Status selectDayMaxByDevice(TsPoint point, Date startTime,
 			Date endTime) {
-		// TODO Auto-generated method stub
-		/*
-		 * 第4个select
-查询某个指定编号设备所有传感器在某段时间,每天的最大值 
- 比如 查询25号风机， 2017年6月3日到2017年6月30日的每个传感器每天的最大值
- 	 		每天中的某一传感器某一天的最大值用"downsample", "24h-max"来选择
- 	 		要得到某一天所有传感器的最大值，通过将dc设置为* 来解决
- 	 		要得到所有天数每天的最大值， 24h的缩量正好是天数，会列出所有天数
-		 */
 		  Map<String,Object> map = new  HashMap<String,Object>();
 			map.put("start",startTime.getTime());
 			map.put("end", endTime.getTime());
 			Map<String,Object> subQuery = new HashMap<String ,Object>();
 			subQuery.put("aggregator", "max");
 			subQuery.put("metric", "time.series.perform");
-		//增加downsample
+			//增加downsample
 			subQuery.put("downsample", "24h-max");
 			Map<String,Object> subTag = new HashMap<String ,Object>();
 			subTag.put("host",point.getDeviceCode());
-	   //此处的SensorCode，设置为*
+			//此处的SensorCode，设置为*
 			subTag.put("dc","*");
 			subQuery.put("tags", subTag);  //将此注释掉,默认应该是会选择所有的
 			List<Map<String,Object>> list = new ArrayList<>();//最外层的[]
@@ -277,13 +263,7 @@ public class OpentsDB extends DBBase
 	@Override
 	public Status selectDayAvgByDevice(TsPoint point, Date startTime,
 			Date endTime) {
-		// TODO Auto-generated method stub
-		/*
-		 *查询某个指定编号设备所有传感器在某段时间,每天的平均值  
- 比如 查询25号风机， 2017年6月3日到2017年6月30日的所有传感器每天的平均值 
-		 * 
-		 */
-		 Map<String,Object> map = new  HashMap<String,Object>();
+			Map<String,Object> map = new  HashMap<String,Object>();
 			map.put("start",startTime.getTime());
 			map.put("end", endTime.getTime());
 			Map<String,Object> subQuery = new HashMap<String ,Object>();

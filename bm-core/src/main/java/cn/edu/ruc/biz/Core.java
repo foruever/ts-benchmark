@@ -90,7 +90,6 @@ public class Core {
 	public static final String FUNCTION_CONSTANT_RATIO_PROERTITY= "function.constant.ratio";
 	
 	public static final int SLEEP_TIMES=5000;
-	//FIXME 参考 设计为一个功能，对应一个参数对象
 	public static void main(String[] args) throws Exception {
 		BizDBUtils.createTables();
 		Properties props = parseArguments(args);
@@ -101,7 +100,6 @@ public class Core {
 		}
 		Constants.DB_CLASS=props.getProperty(DB_CLASS_PROERTITY);
 		initInnerFucntion();//初始化内置函数
-//		DBBase dbBase = Constants.getDBBase();
 		//判断启动方式
 		//如果是离线生成，不建批次，直接生成数据到磁盘
 		//如果是在线数据生产，建ts_load_batch批次，并将数据保存
@@ -147,12 +145,12 @@ public class Core {
 				
 				//废弃 start，结果没啥用，后面的测试也可以替代
 				if(Constants.MODULES.contains(ModuleEnum.CONCURRENT_THROUGHPUT.getId())){
-					startThroughputPerformSTV1(LoadTypeEnum.MUILTI);
-					startThroughputPerformSTV1(LoadTypeEnum.WRITE);
-					startThroughputPerformSTV1(LoadTypeEnum.RANDOM_INSERT);
-					startThroughputPerformSTV1(LoadTypeEnum.UPDATE);
-					startThroughputPerformSTV1(LoadTypeEnum.SIMPLE_READ);
-					startThroughputPerformSTV1(LoadTypeEnum.AGGRA_READ);
+					startThroughputPerform(LoadTypeEnum.MUILTI);
+					startThroughputPerform(LoadTypeEnum.WRITE);
+					startThroughputPerform(LoadTypeEnum.RANDOM_INSERT);
+					startThroughputPerform(LoadTypeEnum.UPDATE);
+					startThroughputPerform(LoadTypeEnum.SIMPLE_READ);
+					startThroughputPerform(LoadTypeEnum.AGGRA_READ);
 				}
 				//废弃 end，结果没啥用，后面的测试也可以替代
 				
@@ -203,7 +201,7 @@ public class Core {
 						pool.awaitTermination(60,TimeUnit.MINUTES);
 						currentCount=r.nextInt(10)+1;
 					} catch (Exception e) {
-						// TODO: handle exception
+						e.printStackTrace();
 					}
 				}
 			}
@@ -211,7 +209,6 @@ public class Core {
 		Constants.getDBBase().cleanup();
 		System.exit(0);
 	}
-
 	/**
 	 * 非加载数据 压力测试
 	 * 线程数(用户数)从1不断增加到200
@@ -226,11 +223,13 @@ public class Core {
 		while(currentClients<100){
 			currentClients++;
 			Map<Integer,Integer> countMap=new HashMap<Integer, Integer>();
+			Map<Integer,Long> timeoutMap=new HashMap<Integer, Long>();
 			ExecutorService pool = Executors.newFixedThreadPool(currentClients);
 			long startTime=System.currentTimeMillis();
 			for( int index=0;index<currentClients;index++){
 				final int thisIndex=index;
 				countMap.put(thisIndex, 0);
+				timeoutMap.put(thisIndex,0L);
 				pool.execute(new Runnable() {
 					@Override
 					public void run() {
@@ -245,8 +244,9 @@ public class Core {
 								status = execQueryByLoadType(dbBase, executeType);
 								if(status.isOK()){
 									countMap.put(thisIndex,++count);
+									timeoutMap.put(thisIndex, status.getCostTime()+timeoutMap.get(thisIndex));
 								}else{
-									printlnErr("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX");//FIXME 
+									printlnErr("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"); 
 								}
 //								Thread.sleep(10);
 								currentTime=System.currentTimeMillis();
@@ -259,7 +259,6 @@ public class Core {
 			}
 			pool.shutdown();
 			try {
-				int waitSeconds=10;
 				pool.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS);
 				long currentTime=System.currentTimeMillis();
 				double costTime = (currentTime-startTime)/Math.pow(1000.0, 1);
@@ -267,9 +266,13 @@ public class Core {
 				long sum=0;
 				for(Integer key:keySet){
 					sum+=countMap.get(key);
-//					println("index:"+(key+1)+",count:"+countMap.get(key));
 				}
-				println("clients:"+currentClients+","+sum/costTime+" requests/sec");
+				long timeoutSum=0;
+				Set<Integer> keySet2 = timeoutMap.keySet();
+				for(Integer key:keySet2){
+					timeoutSum+=timeoutMap.get(key);
+				}
+				println("clients:"+currentClients+","+sum/costTime+" requests/sec,average timeout ["+(long)(timeoutSum/1000.0/sum)+" us/request]");
 				Thread.sleep(TimeUnit.SECONDS.toMillis(3));
 			} catch (Exception e) {
 				e.printStackTrace();
@@ -317,7 +320,7 @@ public class Core {
 						Status status;
 						try {
 							status = execQueryByLoadType(dbBase, executeType);
-							if(status.isOK()){//FIXME 可优化
+							if(status.isOK()){
 								record.addSuccessTimes(executeType, status.getCostTime());
 							}else{
 								record.addFailedTimes(executeType);
@@ -350,7 +353,6 @@ public class Core {
 		pool.shutdown();
 		try {
 			pool.awaitTermination(1, TimeUnit.HOURS);
-			//FIXME 可保存到数据库文件中，只保存结果
 			println("sumSuccessCount:"+record.getSumTimes());
 			Long endTime=System.currentTimeMillis();
 			println("costTime:"+((endTime-startTime)/1000.0));
@@ -374,7 +376,7 @@ public class Core {
 	 * 算法:并发数/平均响应时间
 	 * @param loadType
 	 */
-	private static void startThroughputPerformSTV1(final LoadTypeEnum loadType) {
+	private static void startThroughputPerform(final LoadTypeEnum loadType) {
 		DBBase dbBase = Constants.getDBBase();
 		Properties prop= Constants.PROPERTIES;
 		int sumCount=Integer.parseInt(prop.getProperty(TP_CC_MAX_PROP, "20000"));//tp.cc.max
@@ -403,12 +405,6 @@ public class Core {
 								}else{
 									record.addFailedTimes();
 								}
-//									Thread.sleep(50L);
-//								count++;
-//								//FIXME 加压过程
-//								int count=0;
-//								while(count<runtimes){
-//								}
 							} catch (Exception e) {
 								e.printStackTrace();
 							}
@@ -423,7 +419,6 @@ public class Core {
 					double costAVgSecond=record.getTimeoutAvg()/1000.0/1000.0;
 					double throughput=record.getSuccessTimes()/costAVgSecond;
 					RequestThroughputRecord tpRecord=new RequestThroughputRecord(loadType.getId(),throughput, costAVgSecond, currentCount, record.getSuccessTimes(), record.getFailedTimes());
-					//TODO 插入数据库 
 					BizDBUtils.insertRequestTPRecord(tpRecord);
 					System.out.println(tpRecord);
 					Thread.sleep(100L);
@@ -448,7 +443,6 @@ public class Core {
 		Properties prop=Constants.PROPERTIES;
 		String dbClass = prop.getProperty(DB_CLASS_PROERTITY);
 		String dbUrl = Constants.getDBBase().getDBUrl();
-		//TODO 需要优化
 		Constants.initLoadTypeRatio();
 		Map<String, Object> map = BizDBUtils.selectLoadBatchByDbAndUrl(dbClass,dbUrl);
 		if(map==null){
@@ -968,7 +962,7 @@ public class Core {
 		for(int i=0;i<sumTimes;i++){
 			points = generateLoadData(sumTimes, i+1);
 			LoadRecord record=new LoadRecord();
-			Status status = dbBase.insertMulti(points);//TODO
+			Status status = dbBase.insertMulti(points);
 			if(status.isOK()){
 				long costTime = status.getCostTime();
 				int count=points.size();
@@ -1009,28 +1003,28 @@ public class Core {
 	 */
 	public static void loadPerformConCurrent(DBBase dbBase) throws Exception {
 		int sumTimes = dbBase.getSumTimes(Constants.CACHE_POINT_NUM);
-//		List<TsPoint> points=new ArrayList<TsPoint>();
 		long pointCountSum=0;
 		long pointCostTimeSum=0;
+		long costTimeSum=0L;
 		println("total import["+sumTimes+"]times");
 		long sumSize=0;
 		for(int i=0;i<sumTimes;i++){
-//			points = generateLoadData(sumTimes, i+1);
 			Map<String, List<TsPoint>> map = generateLoadDataMap(sumTimes, i+1);
 			Set<String> threads = map.keySet();
 			ExecutorService pool = Executors.newFixedThreadPool(threads.size());
 			LoadRecord record=new LoadRecord();
 			int sumThreadPoints=0;
 			int sumThreadSize=0;
+			long startTime=System.nanoTime();
 			for(String deviceCode:threads){
 				List<TsPoint> points = map.get(deviceCode);
 				sumThreadPoints+=points.size();
-				String json = JSON.toJSONString(points);
-				sumThreadSize+=json.length();
+//				String json = JSON.toJSONString(points);//FIXME 先去掉这部分
+//				sumThreadSize+=json.length();
 				pool.execute(new Runnable() {
 					@Override
 					public void run() {
-						Status status = dbBase.insertMulti(points);//TODO
+						Status status = dbBase.insertMulti(points);
 						if(status.isOK()){
 							synchronized (Core.class) {
 								long costTime = status.getCostTime();
@@ -1042,6 +1036,7 @@ public class Core {
 			}
 			pool.shutdown();
 			pool.awaitTermination(15, TimeUnit.MINUTES);
+			long endTime=System.nanoTime();
 			record.setLoadPoints(sumThreadPoints);
 			record.setLoadSize(sumThreadSize);
 			long avgCostTimt=IMPORT_COST_TIME/threads.size();
@@ -1050,67 +1045,54 @@ public class Core {
 			int pointsRatio=(int)(sumThreadPoints/(avgCostTimt/Math.pow(1000.0, 3)));
 			record.setPps(pointsRatio);
 			record.setSps(sizeRatio);
-			System.out.println("["+(i+1)+"/"+sumTimes+"]，import["+sumThreadPoints+"]points，["+String.format("%.2f", sumThreadSize/1024.0/1024)+"]MB，cost ["+TimeUnit.NANOSECONDS.toMillis(avgCostTimt) +" ms]，import speed["+pointsRatio+" points/s]["+String.format("%.2f", sizeRatio)+"MB/s]");
-			BizDBUtils.insertLoadRecord(record);
+			long costTime=endTime-startTime;
+			long programRatio=(long) (sumThreadPoints/(costTime/Math.pow(1000.0, 3)));
+			double avgTimeout=(double)avgCostTimt/sumThreadPoints;
+//			System.out.println("["+(i+1)+"/"+sumTimes+"]，import["+sumThreadPoints+"]points，["+String.format("%.2f", sumThreadSize/1024.0/1024)+"]MB，cost ["+TimeUnit.NANOSECONDS.toMillis(avgCostTimt) +" ms]，import speed["+pointsRatio+" points/s]["+String.format("%.2f", sizeRatio)+"MB/s]");
+			System.out.println("["+(i+1)+"/"+sumTimes+"]，import["+sumThreadPoints+"]points，cost ["+TimeUnit.NANOSECONDS.toMillis(costTime) +" ms]，import speed["+programRatio+" points/s],import timeout["+(long)avgTimeout+" us/kpoints]");
 			sumSize+=sumThreadSize;
 			pointCountSum+=sumThreadPoints;
 			pointCostTimeSum+=avgCostTimt;
+			costTimeSum+=costTime;
 			IMPORT_COST_TIME=0;
 		}
-		double ratio=(pointCountSum)/(pointCostTimeSum/Math.pow(1000.0, 3));
-		double sizeRatio=sumSize/1024.0/1024/(pointCostTimeSum/Math.pow(1000.0, 3));
+//		double ratio=(pointCountSum)/(pointCostTimeSum/Math.pow(1000.0, 3));
+//		double sizeRatio=sumSize/1024.0/1024/(pointCostTimeSum/Math.pow(1000.0, 3));
+		double avgTimeout=(double)pointCostTimeSum/pointCountSum;
+		double programRatio=pointCountSum/(costTimeSum/Math.pow(1000.0, 3));
 		System.out.println("total import["+sumTimes+"]times");
 		System.out.println("total import["+pointCountSum+"]points");
-		System.out.println("total import["+String.format("%.2f", sumSize/1024.0/1024)+"]MB");
+//		System.out.println("total import["+String.format("%.2f", sumSize/1024.0/1024)+"]MB");
 		System.out.println("total cost["+TimeUnit.NANOSECONDS.toMillis(pointCostTimeSum)+" ms]");
-		System.out.println("average speed["+(long)ratio+" points/s]");
-		System.out.println("average speed["+String.format("%.2f", sizeRatio)+" MB/s]");
+//		System.out.println("average speed["+(long)ratio+" points/s]");
+		System.out.println("average timeout["+(long)avgTimeout+" us/kps]");
+		System.out.println("average speed["+(long)programRatio+" points/s]");
+//		System.out.println("average speed["+String.format("%.2f", sizeRatio)+" MB/s]");
 	}
 	private static void startSimplePerform(DBBase dbBase) {
-//		System.out.println("||||||||||||||||||||||||||||||||||||");
 		printlnSplitLine();
 		printlnSplitLine("开始单项性能测试");
-		
-//		System.out.println("=============开始单项[写入|吞吐量]性能测试===========");
-//		insertPerformSTV1(dbBase);
-//		System.out.println("=============结束单项[写入|吞吐量]性能测试===========");
-		
-//		threadWait(SLEEP_TIMES);
 		printlnSplitLine("开始单项[写入]性能测试");
-//		singlePerformSTV1(dbBase,LoadTypeEnum.WRITE.getId());
-//		singlePerformSTV2(dbBase,LoadTypeEnum.WRITE.getId());
-		singlePerformSTV3(dbBase,LoadTypeEnum.WRITE.getId());
+		singlePerform(dbBase,LoadTypeEnum.WRITE.getId());
 		printlnSplitLine("结束单项[写入]性能测试");
 		
 		threadWait(SLEEP_TIMES);
 		printlnSplitLine("开始单项[简单查询]性能测试");
-		singlePerformSTV3(dbBase,LoadTypeEnum.SIMPLE_READ.getId());//FIXME 增加日志打印
-//		singlePerformSTV2(dbBase,LoadTypeEnum.SIMPLE_READ.getId());//FIXME 增加日志打印
-//		singlePerformSTV1(dbBase,LoadTypeEnum.SIMPLE_READ.getId());
-//		ChartBizUtil.generateSimpleReadTimeoutPerformChart(getDBName(),Constants.PERFORM_BATCH_ID);
+		singlePerform(dbBase,LoadTypeEnum.SIMPLE_READ.getId());
 		printlnSplitLine("结束单项[简单查询]性能测试");
 		
 		threadWait(SLEEP_TIMES);
 		
 		printlnSplitLine("开始单项[分析查询]性能测试");
-//		singlePerformSTV1(dbBase,LoadTypeEnum.AGGRA_READ.getId());
-//		singlePerformSTV2(dbBase,LoadTypeEnum.AGGRA_READ.getId());
-		singlePerformSTV3(dbBase,LoadTypeEnum.AGGRA_READ.getId());
-//		ChartBizUtil.generateAggreReadTimeoutPerformChart(getDBName(),Constants.PERFORM_BATCH_ID);
+		singlePerform(dbBase,LoadTypeEnum.AGGRA_READ.getId());
 		printlnSplitLine("结束单项[分析查询]性能测试");
 		threadWait(SLEEP_TIMES);
 		printlnSplitLine("开始单项[更新]性能测试");
-//		singlePerformSTV1(dbBase,LoadTypeEnum.UPDATE.getId());
-//		singlePerformSTV2(dbBase,LoadTypeEnum.UPDATE.getId());
-		singlePerformSTV3(dbBase,LoadTypeEnum.UPDATE.getId());
-//		ChartBizUtil.generateUpdateTimeoutPerformChart(getDBName(),Constants.PERFORM_BATCH_ID);
+		singlePerform(dbBase,LoadTypeEnum.UPDATE.getId());
 		printlnSplitLine("结束单项[更新]性能测试");
 		
 		printlnSplitLine("开始单项[随机插入]性能测试");
-//		singlePerformSTV1(dbBase,LoadTypeEnum.RANDOM_INSERT.getId());
-//		singlePerformSTV2(dbBase,LoadTypeEnum.RANDOM_INSERT.getId());
-		singlePerformSTV3(dbBase,LoadTypeEnum.RANDOM_INSERT.getId());
-//		ChartBizUtil.generateRandomInsertTimeoutPerformChart(getDBName(),Constants.PERFORM_BATCH_ID);
+		singlePerform(dbBase,LoadTypeEnum.RANDOM_INSERT.getId());
 		printlnSplitLine("结束单项[随机插入]性能测试");
 		
 		printlnSplitLine();
@@ -1122,6 +1104,7 @@ public class Core {
 	 * 
 	 * 业务流程，从一秒钟写入一个设备数据不断增加设备数，知道增加至设备增加，但是实际每秒钟插入的数据不再增加的时候，停止测试
 	 * @param dbBase
+	 * @deprecated 原因:实现有问题
 	 */
 	public static void insertPerform(DBBase dbBase){
 		int deviceCount=1;
@@ -1148,52 +1131,11 @@ public class Core {
 		}
 	}
 	/**
-	 * 写入性能测试  标准版本1
-	 * 
-	 * 1，进行4次测试
-	 * 1，<1000个数据点
-	 * 2，<4000个数据点
-	 * 3，<16000个数据点
-	 * 4，<64000个数据点  
-	 * 根据设备计算设备点
-	 * @param dbBase
-	 */
-	public static void insertPerformSTV1(DBBase dbBase){
-		int sensorNum=Constants.SENSOR_NUMBER;
-		int maxSeq=4;
-		int devicePN=1000/sensorNum;
-		if(devicePN==0){
-			devicePN=1;
-		}
-		//单线程写入，可加多线程写入方法  //TODO
-		for(int seq=0;seq<maxSeq;seq++){
-			int count=0;
-			int maxCount=100;
-			int deviceCount=(int) (devicePN*Math.pow(4,seq));
-			while(count<maxCount){
-				count++;
-				System.out.println(count);
-				List<TsPoint> points = generateInsertData(deviceCount);
-				Status status = dbBase.insertMulti(points);
-				//将当前批次 结果数据存储到数据库
-				//包含信息，批次号，目标写入设备数，目标每秒写入数据点数，实际每秒的实际数据点数，实际消耗时间
-				if(status.isOK()){
-					WriteRecord record=new WriteRecord();
-					record.setTargetDnPs(deviceCount);
-					record.setTargetPointPs(points.size());
-					long costTime= status.getCostTime();
-					int size = points.size();
-					record.setRealPointPs((int)(size/(costTime/1000.0)));
-					System.out.println(record);
-					BizDBUtils.insertWriteRecord(record);
-				}
-			}
-		}
-	}
-	/**
 	 * 某个设备设备某个传感器，一段时间内的所有值
 	 * @param readType 查询类型  ReadTypeEnum
+	 * @deprecated 原因:实现有问题
 	 */
+	@Deprecated
 	public static void singleQueryPerform(final DBBase dbBase,final Integer readType){
 		if(readType==null){
 			return ;
@@ -1230,7 +1172,6 @@ public class Core {
 			pool.shutdown();
 			while(true){
 				if(pool.isTerminated()){
-					//TODO 保存数据
 					record.computeTimeout();
 					System.out.println(record);
 					BizDBUtils.insertReadRecord(record);
@@ -1260,11 +1201,10 @@ public class Core {
 	public static void endLoad(Map<String,Boolean> flagMap){
 		flagMap.put("status", false);
 	}
-	
 	/**
 	 * 单线程测试
 	 */
-	private static void singlePerformSTV3(final DBBase dbBase,final Integer loadType){
+	private static void singlePerform(final DBBase dbBase,final Integer loadType){
 		int times=100;
 		TimeoutRecord record=new TimeoutRecord(loadType, times, 1);
 		int currentPercent=0;
@@ -1473,8 +1413,12 @@ public class Core {
 		}
 		return status;
 	}
+	/**
+	 *  @deprecated 原因:实现有问题
+	 * @return
+	 */
 	private static boolean isWriteBottleNeck() {
-		//TODO   最新的十条插入的数据的平均值-第11条~20条插入的数据的平均值<=0       前10平均值/100.0
+		//   最新的十条插入的数据的平均值-第11条~20条插入的数据的平均值<=0       前10平均值/100.0
 		long batchId=Constants.PERFORM_BATCH_ID;
 		int limitCount=500;
 		String countSql="select count(*) from ts_write_record where perform_batch_id="+batchId;
@@ -1493,8 +1437,9 @@ public class Core {
 			return false;
 		}
 	}
+	@Deprecated
 	private static boolean isReadBottleNeck(int readType) {
-		// TODO 最新的十条每秒查询数的平均值-第11条~20条每秒查询数的平均值<=0     sn*10/100.0 
+		//  最新的十条每秒查询数的平均值-第11条~20条每秒查询数的平均值<=0     sn*10/100.0 
 		int limitCount=500;
 		long batchId=Constants.PERFORM_BATCH_ID;
 		String countSql="select count(*) from ts_read_record where perform_batch_id="+batchId+" and read_type="+readType;
@@ -1520,7 +1465,7 @@ public class Core {
 	public static List<TsPoint> generateInsertData(Integer deviceNum){
 		long currentTime=System.currentTimeMillis();
 		int sensorSum=Constants.SENSOR_NUMBER;
-		String deviceCode=Constants.INSERT_PERFRM_DEVICE_PREFIX;//FIXME 可修改为可配置的
+		String deviceCode=Constants.INSERT_PERFRM_DEVICE_PREFIX;
 		List<TsPoint> points=new ArrayList<TsPoint>();
 		for(int i=0;i<deviceNum;i++){
 			for(int j=0;j<sensorSum;j++){
@@ -1620,7 +1565,6 @@ public class Core {
 			System.out.println("生成数据时，sumTimes必须大于或者等于order");
 			System.exit(0);
 		}
-		//FIXME 可维护为一个对象
 		int deviceSum=Constants.DEVICE_NUMBER;
 		int sensorSum=Constants.SENSOR_NUMBER;
 		long step=Constants.POINT_STEP;
