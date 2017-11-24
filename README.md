@@ -37,16 +37,13 @@ mvn clean package -Dmaven.test.skip=true
 starup.bat  import tsfile  -dn 2 -sn 10 -ps 7000 -lcp 50000 -p tsfile.url=jdbc:tsfile://127.0.0.1:6667/   
  ```   
 ``` ./starup.sh perform tsfile -modules throughput -p  tsfile.url=jdbc:tsfile://127.0.0.1:6667/ #混合负载的吞吐量，响应时间，一共发送1000000个请求，每秒最多发送 1000000个，客户端数为1000个```   
-
 ```
 #压力测试-多用户加压测试
 ./starup.sh perform tsfile -modules stress_unappend -p  tsfile.url=jdbc:tsfile://127.0.0.1:6667/
-
 ```
 ```
 #压力测试-多设备加压测试
 ./starup.sh sap tsfile -p  tsfile.url=jdbc:tsfile://127.0.0.1:6667/
-
 ```
 
 
